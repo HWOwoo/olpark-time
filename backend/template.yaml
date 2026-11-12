@@ -1,0 +1,250 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >-
+  올팍타임(OLPARK TIME) 서버리스 백엔드 — 정적 웹(S3+CloudFront), 공공데이터 API 중계(Lambda+HTTP API),
+  정기 수집(EventBridge+Lambda→S3). 공공데이터포털 인증키는 SSM Parameter Store(SecureString)에 보관.
+
+Parameters:
+  ServiceKeyParamName:
+    Type: String
+    Default: olpark-time/service-key
+    Description: data.go.kr 인증키(디코딩 키)를 저장한 SSM SecureString 파라미터 이름(앞의 / 제외, 실제 이름은 /olpark-time/service-key)
+  UrlRealtimeParking:
+    Type: String
+    Default: ''
+    Description: 실시간 주차현황 API 엔드포인트(활용신청 후 명세에서 확인)
+  UrlLinkedData:
+    Type: String
+    Default: ''
+    Description: 차량입출차·공연·날씨 연계 데이터 API 엔드포인트
+  UrlPerformances:
+    Type: String
+    Default: ''
+    Description: 올림픽공원 공연정보 API 엔드포인트
+  AllowedOrigin:
+    Type: String
+    Default: https://hwowoo.github.io
+    Description: API를 호출할 수 있는 웹 주소(CORS). CloudFront로 옮기면 그 주소로 변경
+  AlarmEmail:
+    Type: String
+    Default: ''
+    Description: 수집 실패 알림을 받을 이메일(비우면 알림 생성 안 함)
+
+Conditions:
+  HasAlarmEmail: !Not [!Equals [!Ref AlarmEmail, '']]
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Architectures: [arm64]
+    MemorySize: 128
+    CodeUri: src/
+    Environment:
+      Variables:
+        SERVICE_KEY_PARAM: !Sub '/${ServiceKeyParamName}'
+        URL_REALTIME_PARKING: !Ref UrlRealtimeParking
+        URL_LINKED_DATA: !Ref UrlLinkedData
+        URL_PERFORMANCES: !Ref UrlPerformances
+
+Resources:
+  # ---------- 정적 웹 (GitHub Pages에서 이전할 곳) ----------
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+
+  SiteOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-site-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  SiteDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: olpark-time static site
+        DefaultRootObject: index.html
+        HttpVersion: http2
+        PriceClass: PriceClass_200
+        Origins:
+          - Id: site
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt SiteOAC.Id
+            S3OriginConfig: {OriginAccessIdentity: ''}
+        DefaultCacheBehavior:
+          TargetOriginId: site
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # AWS 관리형 CachingOptimized
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: {Service: cloudfront.amazonaws.com}
+            Action: s3:GetObject
+            Resource: !Sub '${SiteBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${SiteDistribution}'
+
+  # ---------- 수집 데이터 저장소 ----------
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: {SSEAlgorithm: AES256}
+      LifecycleConfiguration:
+        Rules:
+          - Id: raw-to-ia
+            Status: Enabled
+            Prefix: raw/
+            Transitions:
+              - {StorageClass: STANDARD_IA, TransitionInDays: 30}
+
+  # ---------- API 중계 ----------
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
+      CorsConfiguration:
+        AllowOrigins: [!Ref AllowedOrigin]
+        AllowMethods: [GET]
+        MaxAge: 600
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: api_proxy.handler
+      Timeout: 15
+      ReservedConcurrentExecutions: 5
+      Environment:
+        Variables:
+          ALLOWED_ORIGIN: !Ref AllowedOrigin
+          CACHE_SECONDS: '60'
+      Policies:
+        - SSMParameterReadPolicy:
+            ParameterName: !Ref ServiceKeyParamName
+        - Statement:
+            - Effect: Allow
+              Action: kms:Decrypt
+              Resource: '*'
+              Condition:
+                StringEquals:
+                  kms:ViaService: !Sub 'ssm.${AWS::Region}.amazonaws.com'
+      Events:
+        Get:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Method: GET
+            Path: /api/{source}
+
+  ApiLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${ApiFunction}'
+      RetentionInDays: 14
+
+  # ---------- 정기 수집 ----------
+  CollectorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: collector.handler
+      Timeout: 60
+      MemorySize: 256
+      ReservedConcurrentExecutions: 2
+      Environment:
+        Variables:
+          DATA_BUCKET: !Ref DataBucket
+      Policies:
+        - S3WritePolicy: {BucketName: !Ref DataBucket}
+        - SSMParameterReadPolicy:
+            ParameterName: !Ref ServiceKeyParamName
+        - Statement:
+            - Effect: Allow
+              Action: kms:Decrypt
+              Resource: '*'
+              Condition:
+                StringEquals:
+                  kms:ViaService: !Sub 'ssm.${AWS::Region}.amazonaws.com'
+      Events:
+        RealtimeEvery10Min:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: rate(10 minutes)
+            Input: '{"sources": ["realtime-parking"], "params": {"numOfRows": "1000"}}'
+        DailyAt6KST:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: cron(0 6 * * ? *)
+            ScheduleExpressionTimezone: Asia/Seoul
+            Input: '{"sources": ["performances", "linked"], "params": {"numOfRows": "1000"}}'
+
+  CollectorLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${CollectorFunction}'
+      RetentionInDays: 14
+
+  # ---------- 수집 실패 알림 ----------
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Condition: HasAlarmEmail
+    Properties:
+      Subscription:
+        - {Protocol: email, Endpoint: !Ref AlarmEmail}
+
+  CollectorErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlarmEmail
+    Properties:
+      AlarmDescription: 올팍타임 수집 Lambda 오류(1시간 내 3회 이상)
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - {Name: FunctionName, Value: !Ref CollectorFunction}
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlarmTopic]
+
+Outputs:
+  ApiBaseUrl:
+    Description: 프론트엔드 config.js 의 API_BASE 에 넣을 주소
+    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/api'
+  SiteUrl:
+    Description: CloudFront 정적 웹 주소(개인 도메인 연결 전)
+    Value: !Sub 'https://${SiteDistribution.DomainName}'
+  SiteBucketName:
+    Value: !Ref SiteBucket
+  SiteDistributionId:
+    Value: !Ref SiteDistribution
+  DataBucketName:
+    Value: !Ref DataBucket

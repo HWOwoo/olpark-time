@@ -5,6 +5,15 @@
 
 > 개인 출품작이며 한국체육산업개발㈜의 공식 서비스가 아닙니다.
 
+**시연 주소(임시)**: https://hwowoo.github.io/olpark-time/
+
+## 운영 계획
+
+- **현재(1단계 시연판)**: GitHub Pages에서 정적 웹으로 임시 운영
+- **이전 예정**: 공공데이터포털 인증키 발급 후 **AWS 서버리스**(S3+CloudFront 정적 웹, Lambda+API Gateway API 중계, EventBridge 정기 수집)로 이전.
+  코드와 배포 설정은 [`backend/`](backend/README.md)에 준비되어 있습니다.
+- 서버를 상시 켜 두는 인스턴스 대신 서버리스를 택해, 2028년까지 운영 비용과 관리 부담을 낮춥니다.
+
 ## 실행
 
 빌드 과정이 없는 정적 웹입니다.

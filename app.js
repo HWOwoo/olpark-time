@@ -306,7 +306,7 @@
   // ---------- 공통 ----------
   function renderAll() { renderForecast(); renderParking(); renderExit(); renderCard(); }
   function init() {
-    if (CFG.SERVICE_KEY) $('#modeBadge').textContent = 'API 연동 준비';
+    if (CFG.API_BASE) $('#modeBadge').textContent = 'API 연동';
     const sel = $('#daySelect');
     DAYS.forEach((d, i) => sel.add(new Option(`2024. ${dayLabel(d).replace('/', '. ')} · ${SIZE[d.size]}`, i, false, i === state.day)));
     sel.addEventListener('change', () => { state.day = +sel.value; state.end = null; renderAll(); });
