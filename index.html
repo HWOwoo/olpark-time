@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>올팍타임 시연판</title>
+<meta name="description" content="공연·날씨·주차 데이터로 알려주는 올림픽공원 방문·퇴장 타이밍 예보 서비스 (2026년도 공공데이터 활용 경진대회 출품 시연판)">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <div>
+        <h1>올팍타임</h1>
+        <p class="tag">올림픽공원, 언제 가고 언제 나올까</p>
+      </div>
+      <span class="badge" id="modeBadge">시연 모드</span>
+    </div>
+    <label class="datepick">
+      <span>시연 기준일</span>
+      <select id="daySelect" aria-label="시연 기준일 선택"></select>
+    </label>
+    <p class="note">인증키 연동 전이라 <b>2024년 7월 실제 입출차 기록</b>을 하루 단위로 재생합니다.</p>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="forecast" aria-selected="true">방문 예보</button>
+    <button role="tab" data-tab="parking" aria-selected="false">주차 현황</button>
+    <button role="tab" data-tab="exit" aria-selected="false">퇴장 타이밍</button>
+    <button role="tab" data-tab="card" aria-selected="false">예보 카드</button>
+  </nav>
+
+  <main>
+    <!-- 방문 예보 -->
+    <section class="panel" id="tab-forecast">
+      <div class="card event" id="eventCard"></div>
+      <div class="card">
+        <div class="card-h">
+          <h2>시간대별 주차 혼잡 예보</h2>
+          <span class="muted small" id="poolInfo"></span>
+        </div>
+        <div class="grades" id="gradeStrip" aria-label="시간대별 혼잡 등급"></div>
+        <div class="chart" id="forecastChart"></div>
+        <div class="legend">
+          <span><i class="sw s1"></i>예측</span>
+          <span><i class="sw s2"></i>실제 기록</span>
+          <span><i class="sw dash"></i>혼잡·만차 기준</span>
+        </div>
+        <p class="small muted" id="accuracy"></p>
+      </div>
+      <div class="card highlight" id="arrivalCard"></div>
+      <div class="card">
+        <h2>비슷한 날의 혼잡 이력</h2>
+        <p class="small muted">행사 규모(관람 추정 차량)와 요일 유형이 같은 날을 찾아 보여 줍니다.</p>
+        <ul class="history" id="historyList"></ul>
+      </div>
+      <div class="card" id="regularCard"></div>
+    </section>
+
+    <!-- 주차 현황 -->
+    <section class="panel" id="tab-parking" hidden>
+      <div class="card">
+        <div class="card-h">
+          <h2>주차 대수 재생</h2>
+          <span class="clock" id="replayClock">18:00</span>
+        </div>
+        <input type="range" id="replay" min="36" max="143" value="108" aria-label="재생 시각">
+        <div class="now" id="nowBox"></div>
+        <p class="small muted">실시간 주차현황 API를 연동하면 이 자리에 현재 값이 표시됩니다. 지금은 선택한 날의 실제 기록을 시각별로 재생합니다.</p>
+      </div>
+      <div class="card">
+        <h2>주차구역 추천</h2>
+        <p class="small muted">「주차장 혼잡도 정보」의 구역별 기록에서 <b>만차 비율이 낮은 구역</b>을 먼저 추천합니다.</p>
+        <ul class="zones" id="zoneList"></ul>
+      </div>
+      <div class="card">
+        <h2>만차일 때 대안</h2>
+        <ul class="plain">
+          <li>대중교통: 지하철 5·9호선 올림픽공원역, 8호선 몽촌토성역 이용 (서울시 지하철 도착정보 연동 예정)</li>
+          <li>공연 전 남는 시간: 잔디마당·장미광장 산책 (잔디시설정보·장미광장 데이터 연동 예정)</li>
+          <li>FAQ·유실물 조회 (자주 묻는 질문정보·유실물 정보 연동 예정)</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 퇴장 타이밍 -->
+    <section class="panel" id="tab-exit" hidden>
+      <div class="card">
+        <h2>공연 종료 후 출차 대기 예측</h2>
+        <div class="row">
+          <label>공연 종료 시각
+            <select id="endSelect" aria-label="공연 종료 시각"></select>
+          </label>
+          <div class="stat">
+            <span class="small muted">주차 중인 관람 추정 차량</span>
+            <b id="audCount">-</b>
+          </div>
+        </div>
+        <div class="waits" id="waitBars"></div>
+        <div class="callout" id="exitAdvice"></div>
+      </div>
+      <div class="card">
+        <h2>모델 vs 실제 출차 기록</h2>
+        <div class="chart" id="exitChart"></div>
+        <div class="legend">
+          <span><i class="sw s2"></i>실제 출차(10분당)</span>
+          <span><i class="sw s1"></i>모델 출차(10분당)</span>
+          <span><i class="sw dash"></i>관측 최대 처리량</span>
+        </div>
+        <details class="small">
+          <summary>계산 방법</summary>
+          <p>① 오후 3시~7시 30분에 들어와 아직 주차 중인 차량을 <b>관람 추정 차량</b>으로 셉니다(시연판은 해당일 기록에서 계산).<br>
+          ② 이 차량들이 공연 종료 후 10분 안에 45%, 10~20분 30%, 20~30분 15%, 30~60분 10%가 출차를 시도한다고 가정합니다.<br>
+          ③ 출차 처리량은 7월 기록의 <b>10분당 최대 출차 대수</b>를 상한으로 두고, 대기 차량 수 ÷ 분당 처리량으로 대기시간을 계산합니다.<br>
+          가정값은 2025년 연계 데이터로 보정할 예정입니다.</p>
+        </details>
+      </div>
+    </section>
+
+    <!-- 예보 카드 -->
+    <section class="panel" id="tab-card" hidden>
+      <div class="card">
+        <h2>오늘의 올팍 교통예보 카드</h2>
+        <p class="small muted">공연 팬 커뮤니티·SNS에 공유할 수 있는 이미지를 자동으로 만듭니다.</p>
+        <canvas id="shareCanvas" width="1080" height="1350" aria-label="예보 카드 미리보기"></canvas>
+        <button class="btn" id="downloadBtn">이미지 저장</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>2026년도 공공데이터 활용 경진대회 출품 시연판 · 개인 출품작이며 한국체육산업개발㈜의 공식 서비스가 아닙니다.</p>
+    <p>데이터: 공공데이터포털 한국체육산업개발㈜ 「올림픽공원 입출차 정보」(2024년 7월), 「주차장 혼잡도 정보」. 등급 기준(동시 주차 800대·1,400대)은 시연용 임시값입니다.</p>
+  </footer>
+</div>
+<div class="tip" id="tip" hidden></div>
+<script src="config.js"></script>
+<script src="data/olpark.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
