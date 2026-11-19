@@ -5,7 +5,8 @@
 
 > 개인 출품작이며 한국체육산업개발㈜의 공식 서비스가 아닙니다.
 
-**시연 주소(임시)**: https://hwowoo.github.io/olpark-time/
+- **시연 주소(임시)**: https://hwowoo.github.io/olpark-time/
+- **시연 영상(2분 10초)**: https://hwowoo.github.io/olpark-time/video.html
 
 ## 운영 계획
 

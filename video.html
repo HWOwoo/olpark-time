@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>올팍타임 시연 영상</title>
+<meta name="description" content="올팍타임 시연 영상 (2분 10초) — 2026년도 공공데이터 활용 경진대회 출품작">
+<style>
+  :root { --bg: #0c1630; --ink: #f0f3f9; --muted: #9fb7e6; --accent: #5598e7; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(circle at 30% 20%, #2b4a86 0%, #13234a 55%, #0c1630 100%) fixed; background-color: var(--bg);
+    color: var(--ink); font-family: "Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif; line-height: 1.6; }
+  main { max-width: 960px; margin: 0 auto; padding: 32px 16px 40px; }
+  h1 { margin: 0; font-size: 30px; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); margin: 4px 0 20px; }
+  video { width: 100%; height: auto; display: block; border-radius: 14px; background: #000; box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+  ol { padding-left: 20px; color: #dbe4f3; font-size: 15px; }
+  ol b { color: #fff; font-variant-numeric: tabular-nums; }
+  .links { display: flex; flex-wrap: wrap; gap: 10px; margin: 18px 0; }
+  .links a { color: #fff; text-decoration: none; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25); padding: 8px 14px; border-radius: 999px; font-size: 14px; }
+  .links a:hover, .links a:focus-visible { background: var(--accent); outline: none; }
+  .note { font-size: 12.5px; color: var(--muted); margin-top: 24px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>올팍타임 시연 영상</h1>
+  <p class="sub">공연·날씨·주차 데이터로 알려주는 올림픽공원 방문·퇴장 타이밍 예보 · 2분 10초</p>
+  <video controls preload="metadata" poster="media/olparktime-demo-poster.jpg" playsinline>
+    <source src="media/olparktime-demo.mp4" type="video/mp4">
+    브라우저가 영상 재생을 지원하지 않습니다. <a href="media/olparktime-demo.mp4">영상 파일 받기</a>
+  </video>
+  <div class="links">
+    <a href="./">시연 웹 열기</a>
+    <a href="media/olparktime-demo.mp4" download>영상 파일 받기(MP4)</a>
+    <a href="https://github.com/HWOwoo/olpark-time">소스 코드</a>
+  </div>
+  <ol>
+    <li><b>0:00</b> 서비스 소개와 해결하려는 문제</li>
+    <li><b>0:19</b> 방문 예보 — 대형 행사일(2024.7.20) 관람 추정 차량, 시간대별 혼잡 예보</li>
+    <li><b>0:45</b> 도착 권장 시각, 비슷한 날의 혼잡 이력, 정기 이용자 알림</li>
+    <li><b>1:00</b> 주차 현황 — 주차 대수 재생, 주차구역 추천</li>
+    <li><b>1:16</b> 퇴장 타이밍 — 출차 대기 예측, 모델과 실제 기록 비교</li>
+    <li><b>1:43</b> 예보 공유 카드</li>
+    <li><b>1:50</b> 운영 계획 — GitHub Pages 임시 운영, AWS 서버리스 이전 예정</li>
+  </ol>
+  <p class="note">2026년도 공공데이터 활용 경진대회 출품작 · 개인 출품작이며 한국체육산업개발㈜의 공식 서비스가 아닙니다. 내레이션은 음성 합성으로 제작했습니다.</p>
+</main>
+</body>
+</html>
